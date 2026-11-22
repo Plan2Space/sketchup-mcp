@@ -4954,6 +4954,48 @@
       "blob_sha": "ffd1c5827da805cf2fef04d5d938371279650d87",
       "blob_size": 87526,
       "owner_group": "artifacts"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/final/banho01_top_after.png",
+      "blob_sha": "6774c345191d5a457fa7a1ba356cb6d83f3edd10",
+      "blob_size": 146596,
+      "owner_group": "artifacts"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/final/banho01_walkin_entrada.png",
+      "blob_sha": "a2f040685f9dec34e82e913304a99ca762905dda",
+      "blob_size": 380310,
+      "owner_group": "artifacts"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/final/banho01_walkin_lateral.png",
+      "blob_sha": "aae5efbe144dbe5567b1326fc8f667c7a1120102",
+      "blob_size": 318384,
+      "owner_group": "artifacts"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/final/model_iso_after.png",
+      "blob_sha": "001336480f3faf1c9ebbf275f3f2825f6609ebcb",
+      "blob_size": 237368,
+      "owner_group": "artifacts"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/final/model_top_after.png",
+      "blob_sha": "84829d72ed4b211be5a336db54ecd0e689fd08d2",
+      "blob_size": 87362,
+      "owner_group": "artifacts"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/final/planta_74_after.skp",
+      "blob_sha": "6069451ed47f8e7df0aaefe4ce346284445194b3",
+      "blob_size": 3345902,
+      "owner_group": "artifacts"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/final/suite01_top_after.png",
+      "blob_sha": "8b45a2620df822510c2878df270a5c983958fa83",
+      "blob_size": 233776,
+      "owner_group": "artifacts"
     }
   ]
 }

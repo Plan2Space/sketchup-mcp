@@ -12,12 +12,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from shapely.ops import unary_union   # noqa: E402
-from core.scale import M  # noqa: E402
-from tools.rooms.shared.geometry import _door_zones, _fbox, _wall_setup, _window_zones  # noqa: E402
-from tools.spatial_model import PT_TO_M, build_spatial_model   # noqa: E402
+from shapely.ops import unary_union  # noqa: E402
 
-from core.scale import PT_TO_IN  # noqa: E402  (fonte unica de escala; nao redefinir)
+from core.scale import (
+    PT_TO_IN,  # noqa: E402  (fonte unica de escala; nao redefinir)
+    M,  # noqa: E402
+)
+from tools.rooms.shared.geometry import _door_zones, _fbox, _wall_setup, _window_zones  # noqa: E402
+from tools.spatial_model import PT_TO_M, build_spatial_model  # noqa: E402
+
 BOX_MIN_AREA_M2 = 2.8   # banho compacto BR (3.2m² real na planta_74) TEM box 80x80; 4.0 vetava TODOS os banhos na escala canônica 0.0259 (Felipe: 'faltaram os banheiros')
 VASO = ("vaso", 0.40, 0.65)
 BOX = ("box", 0.90, 0.90)
@@ -185,9 +188,11 @@ def _pp(kind, x0, y0, x1, y1, z0_m, z1_m, rgb, module):
             "decorative": kind in ("kb_moldura", "kb_frasco", "kb_toalha", "kb_trilho", "kb_puxador", "kb_haste", "kb_ducha", "kb_ralo", "kb_misturador", "kb_ducha_manual", "kb_argola", "kb_gancho", "kb_papeleira", "kb_escova", "kb_toalheiro", "kb_tapete", "kb_bandeja", "kb_sabonete", "kb_copo", "kb_botao", "kb_guia", "kb_caixilho")}  # trim/decor fino declarado (kb_moldura decorativa)
 
 
-def _box_front(b, door_c):
+def _box_front(b, door_c, walk_in_entry_m=None, walk_in_fixw=None):
     """Frente do box (FONTE UNICA para o desenho e para a interface funcional): a frente corre no eixo maior, do lado da porta
     do comodo; vidro FIXO de largura `fixw` num extremo e FOLHA DE CORRER no outro (`leaf_lo` = folha no extremo a0).
+    `walk_in_entry_m` (decisao do Felipe em layout_decisions): sem folha; o fixo ocupa a frente menos esse vao livre e o vao
+    fica do lado da porta (onde a folha estaria).
     Devolve (horiz, a0, a1, front, back, sin, fixw, leaf_lo); `sin` = sentido do interior do box a partir da frente."""
     x0, y0, x1, y1 = b.bounds
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
@@ -200,7 +205,13 @@ def _box_front(b, door_c):
         a0, a1, along_door = y0, y1, dp
         front, back = ((x1, x0) if da >= cx else (x0, x1))
     sin = -1.0 if front > back else 1.0
-    fixw = min(M(0.48), (a1 - a0) * 0.45)
+    if walk_in_fixw is not None:                    # medido contra o espaco livre real (_walk_in_fixw), regra do gate
+        fixw = walk_in_fixw
+    elif walk_in_entry_m is not None:
+        from tools.rooms.bathroom.layout_decisions import walk_in_fixed_m
+        fixw = M(walk_in_fixed_m((a1 - a0) / M(1.0), walk_in_entry_m))
+    else:
+        fixw = min(M(0.48), (a1 - a0) * 0.45)
     leaf_lo = abs(along_door - a0) <= abs(along_door - a1)
     return horiz, a0, a1, front, back, sin, fixw, leaf_lo
 
@@ -211,7 +222,31 @@ _INTERFACE_OF_KIND = {"vaso": ("Vaso", "toilet", "use_face"), "bancada_banho": (
                       "box": ("Box", "shower", "shower_entry")}
 
 
-def _functional_interfaces(ws_by_kind, bb_by_kind, door_c):
+def _walk_in_fixw(cell, items, bounds, door_c, entry_m):
+    """Largura (pt) do vidro fixo do walk-in medida contra o ESPACO LIVRE REAL da frente, com a mesma regra do
+    functional_clearance (`_free_without` + `usable_face`, em polegadas): revestimento de pedra, louca e enxoval ja gerados
+    comem a ponta do vao junto a parede; o fixo encolhe ate o vao usavel dar `entry_m`. Recusa com codigo estavel."""
+    from shapely import affinity
+    from shapely.geometry import LineString
+    from shapely.geometry import box as _shbox
+
+    from tools.rooms.bathroom.layout_decisions import WalkInError, walk_in_fixed_m
+    from tools.rooms.shared.spatial_solver.geometry import _free_without, usable_face
+    horiz, a0, a1, front, _back, sin, _f, leaf_lo = _box_front(_shbox(*bounds), door_c)
+    cell_in = affinity.scale(cell, PT_TO_IN, PT_TO_IN, origin=(0, 0))
+    free = _free_without(cell_in, [it for it in items if it.get("corners")], "Box")
+    pts = ((a0, front), (a1, front)) if horiz else ((front, a0), (front, a1))
+    face = LineString([(x * PT_TO_IN, y * PT_TO_IN) for x, y in pts])
+    usable = usable_face(face, (0.0, -sin) if horiz else (-sin, 0.0), free)
+    if usable is None:
+        raise WalkInError("WALKIN_ENTRY_OBSTRUCTED", "nenhum trecho livre na frente do box")
+    along = [(c[0] if horiz else c[1]) / PT_TO_IN for c in usable.coords]
+    u0, u1 = min(along), max(along)
+    span_m = ((a1 - u0) if leaf_lo else (u1 - a0)) / M(1.0)      # do inicio livre (lado da porta) ate o fundo oposto
+    return M(walk_in_fixed_m(span_m, entry_m))
+
+
+def _functional_interfaces(ws_by_kind, bb_by_kind, door_c, walk_in_entry_m=None, walk_in_fixw=None):
     out = []
     for kind, (module, otype, iface) in _INTERFACE_OF_KIND.items():
         bounds, ws = bb_by_kind.get(kind), ws_by_kind.get(kind)     # bb_by_kind guarda os bounds (pt) da peca
@@ -220,13 +255,19 @@ def _functional_interfaces(ws_by_kind, bb_by_kind, door_c):
         x0, y0, x1, y1 = bounds
         if kind == "box":
             from shapely.geometry import box as _shbox
-            horiz, a0, a1, front, _back, sin, fixw, leaf_lo = _box_front(_shbox(*bounds), door_c)
-            leaf_len = (a1 - fixw + M(0.05)) - a0                # folha do desenho (sobrepoe 5 cm o fixo)
-            s0, s1 = (a0, a1 - leaf_len) if leaf_lo else (a0 + leaf_len, a1)   # folha aberta encosta no extremo oposto
+            horiz, a0, a1, front, _back, sin, fixw, leaf_lo = _box_front(_shbox(*bounds), door_c, walk_in_entry_m,
+                                                                         walk_in_fixw)
+            if walk_in_entry_m is not None:                      # walk-in: vao = frente - fixo, do lado da porta
+                s0, s1 = (a0, a1 - fixw) if leaf_lo else (a0 + fixw, a1)
+                note = (f"walk-in fixo (decisao do Felipe): sem folha; vao livre = frente - fixo "
+                        f"(frente {(a1 - a0) / M(1.0):.3f} m, fixo {fixw / M(1.0):.3f} m)")
+            else:
+                leaf_len = (a1 - fixw + M(0.05)) - a0            # folha do desenho (sobrepoe 5 cm o fixo)
+                s0, s1 = (a0, a1 - leaf_len) if leaf_lo else (a0 + leaf_len, a1)   # folha aberta encosta no extremo oposto
+                note = ("porta de correr: folha de comprimento L corre ate o extremo oposto; vao livre = frente - L "
+                        f"(frente {(a1 - a0) / M(1.0):.3f} m, fixo {fixw / M(1.0):.3f} m, folha {leaf_len / M(1.0):.3f} m)")
             seg = ((s0, front), (s1, front)) if horiz else ((front, s0), (front, s1))
             normal = (0.0, -sin) if horiz else (-sin, 0.0)
-            note = ("porta de correr: folha de comprimento L corre ate o extremo oposto; vao livre = frente - L "
-                    f"(frente {(a1 - a0) / M(1.0):.3f} m, fixo {fixw / M(1.0):.3f} m, folha {leaf_len / M(1.0):.3f} m)")
         else:
             if ws["orient"] == "v":
                 fx = x1 if ws["sgn"] > 0 else x0
@@ -242,7 +283,7 @@ def _functional_interfaces(ws_by_kind, bb_by_kind, door_c):
     return out
 
 
-def _emit(kind, b, ws, lavabo=False, door_c=None):
+def _emit(kind, b, ws, lavabo=False, door_c=None, walk_in_entry_m=None, walk_in_fixw=None):
     """Geometria CRÍVEL por fixture (substitui a caixa única)."""
     x0, y0, x1, y1 = b.bounds
     w, d = x1 - x0, y1 - y0
@@ -421,7 +462,7 @@ def _emit(kind, b, ws, lavabo=False, door_c=None):
         # ducha manual slim; ralo linear. NADA de toalheiro dentro do box.
         gt = M(0.008)
         _pf = M(0.022)
-        horiz, a0, a1, front, back, sin, fixw, leaf_lo = _box_front(b, door_c)
+        horiz, a0, a1, front, back, sin, fixw, leaf_lo = _box_front(b, door_c, walk_in_entry_m, walk_in_fixw)
         if horiz:
             def pane(al, ah, off, z0, z1, kd, rgb):
                 return _pp(kd, al, front + sin * M(off), ah,
@@ -430,57 +471,80 @@ def _emit(kind, b, ws, lavabo=False, door_c=None):
             def pane(al, ah, off, z0, z1, kd, rgb):
                 return _pp(kd, front + sin * M(off), al,
                            front + sin * (M(off) + gt), ah, z0, z1, rgb, "Box")
-        if leaf_lo:
-            lf0, lf1 = a0, a1 - fixw + M(0.05)
-            fx0_, fx1_ = a1 - fixw, a1
-            free_edge = a0
-        else:
-            lf0, lf1 = a0 + fixw - M(0.05), a1
-            fx0_, fx1_ = a0, a0 + fixw
-            free_edge = a1
-        out.append(pane(fx0_, fx1_, 0.0, 0.014, 2.44, "box_vidro", RGB2["box_vidro"]))
-        out.append(pane(lf0, lf1, 0.065, 0.014, 2.44, "kb_folha", RGB2["box_vidro"]))
-        # montante da FOLHA no bordo de sobreposicao — a aresta preta full-height
-        # na frente do fixo e o que le "porta de correr" de longe (fixo x folha)
-        fe = lf1 if leaf_lo else lf0
-        out.append(pane(fe - M(0.011), fe + M(0.011), 0.062, 0.014, 2.44,
-                        "kb_perfil", RGB2["gola"]))
-        # trilho superior discreto (NAO tampa): so a faixa da frente
-        if horiz:
-            out.append(_pp("kb_trilho", a0, front - sin * M(0.004), a1,
-                           front + sin * M(0.065), 2.44, 2.462, RGB2["gola"], "Box"))
-        else:
-            out.append(_pp("kb_trilho", front - sin * M(0.004), a0,
-                           front + sin * M(0.065), a1, 2.44, 2.462, RGB2["gola"], "Box"))
-        # montantes finos nas duas pontas da frente
-        for ae in (a0, a1):
+        if walk_in_entry_m is not None:
+            # WALK-IN FIXO (decisao do Felipe, layout_decisions): so o vidro fixo no extremo oposto a porta, perfil U na parede,
+            # barra estabilizadora no topo ate a parede do fundo; vao livre do lado da porta. Sem folha/trilho/guia/puxador.
+            fx0_, fx1_ = (a1 - fixw, a1) if leaf_lo else (a0, a0 + fixw)
+            wall_end, free_end = (a1, fx0_) if leaf_lo else (a0, fx1_)
+            out.append(pane(fx0_, fx1_, 0.0, 0.014, 2.44, "box_vidro", RGB2["box_vidro"]))
             if horiz:
-                out.append(_pp("kb_perfil", ae - _pf / 2, front - _pf / 2, ae + _pf / 2,
+                out.append(_pp("kb_perfil", wall_end - _pf / 2, front - _pf / 2, wall_end + _pf / 2,
                                front + _pf / 2, 0.014, 2.44, RGB2["gola"], "Box"))
+                out.append(_pp("kb_perfil", free_end - M(0.008), min(front, back), free_end + M(0.008),
+                               max(front, back), 2.40, 2.416, RGB2["gola"], "Box"))
+                out.append(_pp("kb_piso_box", a0 + M(0.01), min(front, back) + M(0.01),
+                               a1 - M(0.01), max(front, back) - M(0.01),
+                               0.0125, 0.016, [52, 51, 53], "Box"))
             else:
-                out.append(_pp("kb_perfil", front - _pf / 2, ae - _pf / 2, front + _pf / 2,
-                               ae + _pf / 2, 0.014, 2.44, RGB2["gola"], "Box"))
-        # puxador vertical 38cm a ~6cm da borda livre da folha
-        ph = free_edge + (M(0.06) if leaf_lo else -M(0.095))
-        if horiz:
-            out.append(_pp("kb_puxador", ph, front + sin * M(0.075), ph + M(0.045),
-                           front + sin * M(0.11), 0.95, 1.42, RGB2["gola"], "Box"))
-        else:
-            out.append(_pp("kb_puxador", front + sin * M(0.075), ph,
-                           front + sin * M(0.11), ph + M(0.045), 0.95, 1.42, RGB2["gola"], "Box"))
-        # GUIA inferior minima da folha (auditoria: sistema de correr legivel)
-        if horiz:
-            out.append(_pp("kb_guia", lf0, front + sin * M(0.06), lf1,
-                           front + sin * M(0.085), 0.014, 0.028, RGB2["gola"], "Box"))
-            out.append(_pp("kb_piso_box", a0 + M(0.01), min(front, back) + M(0.01),
-                           a1 - M(0.01), max(front, back) - M(0.01),
-                           0.0125, 0.016, [52, 51, 53], "Box"))
-        else:
-            out.append(_pp("kb_guia", front + sin * M(0.06), lf0,
-                           front + sin * M(0.085), lf1, 0.014, 0.028, RGB2["gola"], "Box"))
-            out.append(_pp("kb_piso_box", min(front, back) + M(0.01), a0 + M(0.01),
-                           max(front, back) - M(0.01), a1 - M(0.01),
-                           0.0125, 0.016, [52, 51, 53], "Box"))
+                out.append(_pp("kb_perfil", front - _pf / 2, wall_end - _pf / 2, front + _pf / 2,
+                               wall_end + _pf / 2, 0.014, 2.44, RGB2["gola"], "Box"))
+                out.append(_pp("kb_perfil", min(front, back), free_end - M(0.008), max(front, back),
+                               free_end + M(0.008), 2.40, 2.416, RGB2["gola"], "Box"))
+                out.append(_pp("kb_piso_box", min(front, back) + M(0.01), a0 + M(0.01),
+                               max(front, back) - M(0.01), a1 - M(0.01),
+                               0.0125, 0.016, [52, 51, 53], "Box"))
+        else:  # box de correr (padrao)
+            if leaf_lo:
+                lf0, lf1 = a0, a1 - fixw + M(0.05)
+                fx0_, fx1_ = a1 - fixw, a1
+                free_edge = a0
+            else:
+                lf0, lf1 = a0 + fixw - M(0.05), a1
+                fx0_, fx1_ = a0, a0 + fixw
+                free_edge = a1
+            out.append(pane(fx0_, fx1_, 0.0, 0.014, 2.44, "box_vidro", RGB2["box_vidro"]))
+            out.append(pane(lf0, lf1, 0.065, 0.014, 2.44, "kb_folha", RGB2["box_vidro"]))
+            # montante da FOLHA no bordo de sobreposicao — a aresta preta full-height
+            # na frente do fixo e o que le "porta de correr" de longe (fixo x folha)
+            fe = lf1 if leaf_lo else lf0
+            out.append(pane(fe - M(0.011), fe + M(0.011), 0.062, 0.014, 2.44,
+                            "kb_perfil", RGB2["gola"]))
+            # trilho superior discreto (NAO tampa): so a faixa da frente
+            if horiz:
+                out.append(_pp("kb_trilho", a0, front - sin * M(0.004), a1,
+                               front + sin * M(0.065), 2.44, 2.462, RGB2["gola"], "Box"))
+            else:
+                out.append(_pp("kb_trilho", front - sin * M(0.004), a0,
+                               front + sin * M(0.065), a1, 2.44, 2.462, RGB2["gola"], "Box"))
+            # montantes finos nas duas pontas da frente
+            for ae in (a0, a1):
+                if horiz:
+                    out.append(_pp("kb_perfil", ae - _pf / 2, front - _pf / 2, ae + _pf / 2,
+                                   front + _pf / 2, 0.014, 2.44, RGB2["gola"], "Box"))
+                else:
+                    out.append(_pp("kb_perfil", front - _pf / 2, ae - _pf / 2, front + _pf / 2,
+                                   ae + _pf / 2, 0.014, 2.44, RGB2["gola"], "Box"))
+            # puxador vertical 38cm a ~6cm da borda livre da folha
+            ph = free_edge + (M(0.06) if leaf_lo else -M(0.095))
+            if horiz:
+                out.append(_pp("kb_puxador", ph, front + sin * M(0.075), ph + M(0.045),
+                               front + sin * M(0.11), 0.95, 1.42, RGB2["gola"], "Box"))
+            else:
+                out.append(_pp("kb_puxador", front + sin * M(0.075), ph,
+                               front + sin * M(0.11), ph + M(0.045), 0.95, 1.42, RGB2["gola"], "Box"))
+            # GUIA inferior minima da folha (auditoria: sistema de correr legivel)
+            if horiz:
+                out.append(_pp("kb_guia", lf0, front + sin * M(0.06), lf1,
+                               front + sin * M(0.085), 0.014, 0.028, RGB2["gola"], "Box"))
+                out.append(_pp("kb_piso_box", a0 + M(0.01), min(front, back) + M(0.01),
+                               a1 - M(0.01), max(front, back) - M(0.01),
+                               0.0125, 0.016, [52, 51, 53], "Box"))
+            else:
+                out.append(_pp("kb_guia", front + sin * M(0.06), lf0,
+                               front + sin * M(0.085), lf1, 0.014, 0.028, RGB2["gola"], "Box"))
+                out.append(_pp("kb_piso_box", min(front, back) + M(0.01), a0 + M(0.01),
+                               max(front, back) - M(0.01), a1 - M(0.01),
+                               0.0125, 0.016, [52, 51, 53], "Box"))
         # CHUVEIRO DE PAREDE — Deca Flex Max Ø22 Black Matte (curadoria
         # 2026-08-08: Felipe aboliu o de teto, "zoado"). Braco horizontal
         # ~31cm saindo da parede interna a ~2.28m; cabeca redonda com face
@@ -948,6 +1012,12 @@ def _place_fixture(sm, walls, w_m, d_m, placed, circ_u, comodo, cell, win_zone, 
 
 
 def build_boxes(con, room_id):
+    from tools.rooms.bathroom import layout_decisions
+    box_decision = layout_decisions.box_decision(con, room_id)       # decisao do Felipe (ex.: walk-in do Banho 01)
+    walk_in_entry_m = (box_decision["entry_min"]["value"]
+                       if box_decision and box_decision["box_style"] == "walk_in" else None)
+    if box_decision and box_decision["entry_min"]["unit"] != "m":
+        raise ValueError(f"{box_decision['id']}: unidade nao suportada {box_decision['entry_min']['unit']!r}")
     sm = build_spatial_model(con, room_id)
     cell = sm["_geom"]["cell"]
     area = sm["area_m2"]
@@ -1040,7 +1110,8 @@ def build_boxes(con, room_id):
                         cand = None
                 if ok_exp and cand is not None and cand.area > b.area:
                     b = cand
-            items.extend(_emit(kind, b, ws, lavabo=lavabo, door_c=door_c))
+            items.extend(_emit(kind, b, ws, lavabo=lavabo, door_c=door_c,
+                               walk_in_entry_m=walk_in_entry_m if kind == "box" else None))
             placed.append(b)
             ws_by_kind[kind] = ws
             bb_by_kind[kind] = b.bounds
@@ -1078,6 +1149,14 @@ def build_boxes(con, room_id):
         if op["id"] in swings and op["wall_id"] in sm["_geom"]["room_walls"]
     ]
     items.extend(_enxoval_parts(cell, ws_by_kind, bb_by_kind, door_c, lavabo, room_swings))
+    walk_in_fixw = None
+    if walk_in_entry_m is not None and "box" in bb_by_kind:
+        # o vao do walk-in so pode ser medido depois da pele e do enxoval existirem: refaz SO as pecas do box
+        from shapely.geometry import box as _shbox
+        walk_in_fixw = _walk_in_fixw(cell, items, bb_by_kind["box"], door_c, walk_in_entry_m)
+        items = [it for it in items if it.get("module") != "Box"]
+        items.extend(_emit("box", _shbox(*bb_by_kind["box"]), ws_by_kind["box"], lavabo=lavabo, door_c=door_c,
+                           walk_in_entry_m=walk_in_entry_m, walk_in_fixw=walk_in_fixw))
     theme = theme_of(sm.get("room_name"))
     _apply_theme(items, theme)
     # FP-043/P3a-03: ralo linear e vidro fixo estendem-se ate a parede do fundo; encurta a ponta que entraria nela.
@@ -1087,7 +1166,11 @@ def build_boxes(con, room_id):
                          for it in items) if c is not None]
     kinds = [it["kind"] for it in items]
     return items, {"result": "OK", "room_name": sm.get("room_name"),
-                   "functional_interfaces": _functional_interfaces(ws_by_kind, bb_by_kind, door_c),
+                   "functional_interfaces": _functional_interfaces(ws_by_kind, bb_by_kind, door_c, walk_in_entry_m,
+                                                                   walk_in_fixw),
+                   "box_style": "walk_in" if walk_in_entry_m is not None else "sliding",
+                   "applied_decisions": ([{"id": box_decision["id"], "origin": box_decision["origin"]}]
+                                         if box_decision else []),
                    "theme": theme,
                    "n_pecas": len(items), "pecas": kinds,
                    "tem_vaso": "vaso" in kinds, "tem_box": "box" in kinds}

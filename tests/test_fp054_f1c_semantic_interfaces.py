@@ -189,4 +189,6 @@ def test_exporting_interfaces_does_not_change_any_box():
     from tools.validation.room_regression_diff import capture
     with contextlib.redirect_stdout(io.StringIO()):
         s = capture()
-    assert s["snapshot_sha256"].startswith("f8e4dbe406eab2282a16") and s["part_count"] == 390   # FP-056 P3 (so a A.S. mudou: zona sem a massa das barreiras construidas)
+    # FP-056 P3 (so a A.S. mudou: zona sem a massa das barreiras construidas) -> f8e4dbe4…/390; box walk-in do Banho 01
+    # (decisao Felipe 2026-11-22, so o modulo Box do r005 muda) -> c500ce4b…/385
+    assert s["snapshot_sha256"].startswith("c500ce4b2afc930cc378") and s["part_count"] == 385

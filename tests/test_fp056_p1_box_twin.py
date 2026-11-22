@@ -12,6 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 # unico desvio aceito: medida a 0,1 mm do limiar (o construido mediu 0,52 mm na PAREDE; o gemeo 0,6 mm na CONTENCAO) —
 # dentro do ruido de arredondamento da exportacao. Registrado, nao escondido.
 BORDERLINE = {"r004|CONTAINMENT|backsplash"}
+# mudanca DELIBERADA posterior a linha de base da FP-055 P4 (que fica intacta como retrato historico): o box walk-in do Banho 01
+# (decisao Felipe 2026-11-22, bathroom/layout_decisions) tira o sistema de correr; a parte do box que ainda entra na laje (D-007)
+# cai de 0,062 m para 0,041 m (CONTAINMENT) e de 0,051 m para 0,041 m (WALL). So estas duas chaves do r005|Box mudam.
+CHANGED_SINCE_BASELINE = {"r005|CONTAINMENT|Box": 0.04095, "r005|WALL|Box": 0.04095}
 
 
 @pytest.mark.planta74_scale
@@ -33,7 +37,8 @@ def test_box_twin_reproduces_the_built_defects_of_the_rooms_not_touched_by_the_f
     assert set(got) - BORDERLINE == {b["key"] for b in base}
     for b in base:
         tol = 0.5 if b["unit"] == "deg" else 0.0002
-        assert abs(got[b["key"]] - b["measure"]) <= tol, (b["key"], got[b["key"]], b["measure"])
+        expected = CHANGED_SINCE_BASELINE.get(b["key"], b["measure"])
+        assert abs(got[b["key"]] - expected) <= tol, (b["key"], got[b["key"]], expected)
 
 
 @pytest.mark.planta74_scale

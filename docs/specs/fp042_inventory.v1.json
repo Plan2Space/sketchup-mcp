@@ -21362,6 +21362,31 @@
       "status": "VERIFIED_PATH_BASED_OWNER_CLASSIFICATION",
       "document_owner": "project_documentation",
       "ownership_evidence": "FP042_P5_PATH_RULES_NOT_CONTENT_SEMANTICS"
+    },
+    {
+      "path": "tools/rooms/bathroom/layout_decisions.py",
+      "domain": "room_bathroom",
+      "disposition": "tools.rooms.bathroom",
+      "phase": "P3",
+      "status": "VERIFIED_RUNTIME_PATH_OWNER_ROLE",
+      "runtime_owner": "tools.rooms.bathroom",
+      "ownership_evidence": "FP042_P3_EXPLICIT_PATH_AND_ROLE_NOT_L2"
+    },
+    {
+      "path": "tests/test_bathroom_walkin_decision.py",
+      "domain": "test",
+      "disposition": "retain_path_with_explicit_owner",
+      "phase": "P5",
+      "status": "VERIFIED_PATH_BASED_OWNER_CLASSIFICATION",
+      "document_owner": "regression_test_suite",
+      "ownership_evidence": "FP042_P5_PATH_RULES_NOT_CONTENT_SEMANTICS"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/fp044_baseline.json",
+      "domain": "reference_or_artifact",
+      "disposition": "retain_canonical_location",
+      "phase": "P6",
+      "status": "VERIFIED_CANONICAL_LOCATION_AND_GIT_BLOB"
     }
   ]
 }

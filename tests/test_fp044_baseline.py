@@ -9,7 +9,8 @@ import pytest
 
 # linha de base vigente: capturada depois da FP-056 P3 (zona da A.S. sem a massa das barreiras construidas; so a A.S. mudou). As anteriores
 # (artifacts/review/fp044/baseline/ e fp054/suite01_decision/) ficam como retrato historico.
-BASELINE = Path(__file__).resolve().parents[1] / "artifacts/review/fp056/p3/fp044_baseline.json"
+# 2026-11-22: box walk-in do Banho 01 (decisao Felipe; so BANHO 01 mudou, canonicos identicos) -> nova linha de base ao lado.
+BASELINE = Path(__file__).resolve().parents[1] / "artifacts/review/planta_74/fix-suite01-bath-walkin/fp044_baseline.json"
 
 pytestmark = pytest.mark.planta74_scale      # collect_boxes da planta_74 exige PT_TO_M=0.0259 (processo proprio)
 

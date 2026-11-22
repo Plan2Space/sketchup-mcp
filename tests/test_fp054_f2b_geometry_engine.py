@@ -132,8 +132,10 @@ def test_missing_semantic_interface_is_an_input_violation():
 
 
 # ------------------------------------------------------------------------------------------------ planta real
+# ("r005", "FUNCTIONAL_SHOWER_ENTRY_WIDTH", "r005:Box", "WALL") saiu: box walk-in do Banho 01 (decisao Felipe 2026-11-22,
+# bathroom/layout_decisions) deixa 0,60 m livres — o achado foi CORRIGIDO e nao pode voltar (FIXED_REAL abaixo).
+FIXED_REAL = {("r005", "FUNCTIONAL_SHOWER_ENTRY_WIDTH", "r005:Box", "WALL")}
 EXPECTED_REAL = {
-    ("r005", "FUNCTIONAL_SHOWER_ENTRY_WIDTH", "r005:Box", "WALL"),
     ("r006", "FUNCTIONAL_SHOWER_ENTRY_FRONT_CLEARANCE", "r006:Box", "WALL"),
     ("r006", "FUNCTIONAL_SHOWER_ENTRY_WIDTH", "r006:Box", "WALL"),
     ("r006", "FUNCTIONAL_SHOWER_REACH_PATH", "r006:Box", "INTERFACE_OBSTRUCTED"),
@@ -159,4 +161,4 @@ def test_real_plant_reproduces_exactly_the_eight_known_findings_with_culprits():
         got |= {(rid, v.code, v.object_id, v.culprit) for v in ev.hard_violations}
         if rid == "r004":
             assert ev.feasible and ev.metrics["min_margin_m"] > 0                          # cozinha: so diagnostico
-    assert got == EXPECTED_REAL
+    assert got == EXPECTED_REAL and not (got & FIXED_REAL)

@@ -9135,6 +9135,12 @@
       "blob_sha": "57fcf63f4579ea4bdadfacb9c46ac1a120fb54d2",
       "blob_size": 5176,
       "owner_group": "artifacts"
+    },
+    {
+      "path": "artifacts/review/planta_74/fix-suite01-bath-walkin/fp044_baseline.json",
+      "blob_sha": "59d568e4c73754e7a11f40321ed1337d3a60999d",
+      "blob_size": 2159,
+      "owner_group": "artifacts"
     }
   ]
 }
